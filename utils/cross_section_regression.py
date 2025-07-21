@@ -25,7 +25,7 @@ def run_cross_sectional_regression(
     factor_loadings : pd.DataFrame
         Factor exposures with shape (N_assets, N_factors).
     weights : pd.Series
-        Cross-sectional regression asset weights with shape (N_factors, ).
+        Cross-sectional regression asset weights with shape (N_assets, ).
     huber_t : float, default=1.345
         Huber's T tuning constant.
 
