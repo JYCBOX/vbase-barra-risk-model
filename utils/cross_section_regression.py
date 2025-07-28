@@ -56,9 +56,14 @@ def run_cross_sectional_regression(
     x = factor_loadings.loc[com_idx].astype(float)
     w = weights.loc[com_idx].astype(float)
 
+    # Add weights
+    sqrt_w = np.sqrt(w)
+    y_tilde = y * sqrt_w
+    X_tilde = x.mul(sqrt_w, axis=0)
+
     # robust regression via Huber's T
     huber = sm.robust.norms.HuberT(t=huber_t)
-    model = sm.RLM(endog=y, exog=x, M=huber, weights=w)
+    model = sm.RLM(endog=y_tilde, exog=X_tilde, M=huber)
     results = model.fit()
 
     # return a Series with factor names as index
