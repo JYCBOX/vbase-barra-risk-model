@@ -1,6 +1,6 @@
 """Cross-section regression utilities."""
 
-from typing import Dict, Union, cast
+from typing import Dict, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ def run_cross_sectional_regression(
     factor_loadings: pd.DataFrame,
     weights: pd.Series,
     huber_t: float = 1.345,
-) -> pd.Series:
+) -> Tuple[pd.Series, pd.Series]:
     """
     Run a cross-sectional regression for one period using Huber's T norm
 
@@ -31,17 +31,10 @@ def run_cross_sectional_regression(
 
     Returns
     -------
-    pd.Series
-        Estimated factor returns indexed by factor names with shape (N_factors, ).
+    Tuple[pd.Series, pd.Series]
+        Estimated factor returns indexed by factor names with shape (N_factors, )
+        and residuals indexed by asset names with shape (N_assets, ).
     """
-
-    # input validation
-    if asset_returns.empty:
-        raise ValueError("asset_returns is empty")
-    if factor_loadings.empty:
-        raise ValueError("factor_loadings is empty")
-    if weights.empty:
-        raise ValueError("weights is empty")
 
     # ensure matching indices
     if not asset_returns.index.equals(factor_loadings.index):
@@ -50,11 +43,9 @@ def run_cross_sectional_regression(
     if not asset_returns.index.equals(weights.index):
         raise ValueError("Asset indices do not match between returns and weights.")
 
-    com_idx = asset_returns.index.intersection(factor_loadings.index).intersection(weights.index)
-
-    y = asset_returns.loc[com_idx].astype(float)
-    x = factor_loadings.loc[com_idx].astype(float)
-    w = weights.loc[com_idx].astype(float)
+    y = asset_returns.astype(float)
+    x = factor_loadings.astype(float)
+    w = weights.astype(float)
 
     # Add weights
     sqrt_w = np.sqrt(w)
@@ -66,8 +57,10 @@ def run_cross_sectional_regression(
     model = sm.RLM(endog=y_tilde, exog=X_tilde, M=huber)
     results = model.fit()
 
-    # return a Series with factor names as index
-    return pd.Series(results.params, index=factor_loadings.columns, name="factor_returns")
+    factor_returns = pd.Series(results.params, index=factor_loadings.columns, name="factor_returns")
+    residuals = pd.Series((results.resid / sqrt_w).to_numpy(), index=y.index, name="residuals")
+
+    return factor_returns, residuals
 
 
 def calculate_factor_returns(
@@ -75,7 +68,7 @@ def calculate_factor_returns(
     exposures_df: pd.DataFrame,
     weights_df: pd.DataFrame,
     huber_t: float = 1.345,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Calculate factor returns for each period by calling run_cross_sectional_regression,
     with `sim` function to drive the period loop automatically.
@@ -94,8 +87,9 @@ def calculate_factor_returns(
 
     Returns
     -------
-    pd.DataFrame
-        Estimated factor returns indexed by periods with shape (N_periods, N_factors).
+    Tuple[pd.DataFrame, pd.DataFrame]
+        - factor_returns_df : (N_periods, N_factors)
+        - residuals_df      : (N_periods, N_assets)
     """
 
     for name, df in [
@@ -142,14 +136,14 @@ def calculate_factor_returns(
         factor_loadings = cast(pd.DataFrame, e_cs)
         weights = cast(pd.Series, w_cs)
 
-        fr = run_cross_sectional_regression(
+        factor_returns, residuals = run_cross_sectional_regression(
             asset_returns=asset_returns,
             factor_loadings=factor_loadings,
             weights=weights,
             huber_t=huber_t,
         )
 
-        return {"factor_returns": fr}
+        return {"factor_returns": factor_returns, "residuals": residuals}
 
     # call sim
     out = sim(
@@ -157,11 +151,11 @@ def calculate_factor_returns(
         callback=callback,
         time_index=returns_df.index,
     )
-    result_df = out["factor_returns"]
-    if not isinstance(result_df, pd.DataFrame):
-        result_df = cast(pd.DataFrame, result_df)
 
-    return result_df
+    factor_returns_df = cast(pd.DataFrame, out["factor_returns"])
+    residuals_df = cast(pd.DataFrame, out["residuals"])
+
+    return factor_returns_df, residuals_df
 
 
 def wide_to_long(
