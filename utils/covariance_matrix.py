@@ -1,4 +1,6 @@
-"""Compute factor covariance matrix using EWMA with separate half-lives for volatility and correlation."""
+"""Compute factor covariance matrix using EWMA.
+Separate half-lives are used for volatility and correlation estimation.
+"""
 
 import pandas as pd
 import numpy as np
@@ -61,4 +63,3 @@ factor_cov = compute_ewma_covariance(
 # === Save the result to CSV ===
 factor_cov.to_csv("factor_covariance_matrix.csv", float_format="%.10f")
 print("[DONE] factor_covariance_matrix.csv saved.")
-
