@@ -1,0 +1,58 @@
+name: Pylint
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths: ["**/*.py"]
+  pull_request:
+    branches: [ main, dev ]
+    paths: ["**/*.py"]
+
+jobs:
+  pylint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pylint
+
+      - name: List Python files
+        id: files
+        shell: bash
+        run: |
+          PY_FILES=$(git ls-files '*.py' \
+            ':(exclude)venv/**' \
+            ':(exclude).venv/**' \
+            ':(exclude)**/__pycache__/**' \
+            ':(exclude)**/site-packages/**' || true)
+          printf "%s\n" "$PY_FILES" > pyfiles.txt
+          COUNT=$(sed '/^\s*$/d' pyfiles.txt | wc -l | tr -d ' ')
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Skip when no Python files
+        if: steps.files.outputs.count == '0'
+        run: echo "No Python files to lint. Skipping."
+
+      - name: Run pylint
+        if: steps.files.outputs.count != '0'
+        run: |
+          xargs -a pyfiles.txt pylint --fail-under=8.0
